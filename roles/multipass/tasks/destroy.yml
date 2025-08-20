@@ -1,0 +1,45 @@
+---
+- name: Stop and delete k3s VMs
+  block:
+    - name: Stop all k3s VMs
+      command: multipass stop {{ item }}
+      register: stop_result
+      failed_when: false
+      loop: "{{ groups['k3s_masters'] + groups['k3s_workers'] }}"
+
+    - name: Delete all k3s VMs
+      command: multipass delete {{ item }}
+      register: delete_result
+      failed_when: false
+      loop: "{{ groups['k3s_masters'] + groups['k3s_workers'] }}"
+
+    - name: Purge deleted VMs
+      command: multipass purge
+      register: purge_result
+      failed_when: false
+
+  tags:
+    - destroy
+    - multipass
+
+- name: Clean up local files
+  block:
+    - name: Remove kubeconfig file
+      file:
+        path: kubeconfig
+        state: absent
+      failed_when: false
+
+    - name: Display cleanup status
+      debug:
+        msg: |
+          Cleanup completed!
+          
+          VMs stopped and deleted
+          Local kubeconfig removed
+          
+          To verify: multipass list
+
+  tags:
+    - destroy
+    - multipass

@@ -1,0 +1,103 @@
+---
+- name: Deploy k3s cluster on Multipass
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  
+  tasks:
+    - name: Check prerequisites
+      block:
+        - name: Check if multipass is available
+          command: which multipass
+          register: multipass_check
+          changed_when: false
+          failed_when: multipass_check.rc != 0
+        
+        - name: Check if ansible is available
+          command: which ansible
+          register: ansible_check
+          changed_when: false
+          failed_when: ansible_check.rc != 0
+        
+        - name: Display prerequisites status
+          debug:
+            msg: "Prerequisites check passed"
+          when: multipass_check.rc == 0 and ansible_check.rc == 0
+
+    - name: Include multipass role
+      include_role:
+        name: multipass
+      tags: 
+        - deploy
+        - multipass
+
+    - name: Include k3s role
+      include_role:
+        name: k3s
+      tags:
+        - deploy
+        - k3s
+      when: inventory_hostname in groups['k3s_masters'] or inventory_hostname in groups['k3s_workers']
+
+- name: Destroy k3s cluster
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - group_vars/all.yml
+  
+  tasks:
+    - name: Include multipass destroy role
+      include_role:
+        name: multipass
+        tasks_from: destroy
+      tags:
+        - destroy
+        - multipass
+
+- name: Display cluster information
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Wait for cluster to be ready
+      pause:
+        seconds: 30
+      tags:
+        - deploy
+
+    - name: Get cluster status
+      block:
+        - name: Get kubeconfig from master
+          command: multipass exec k3s-master -- cat /etc/rancher/k3s/k3s.yaml
+          register: kubeconfig
+          changed_when: false
+          tags:
+            - deploy
+            - info
+
+        - name: Save kubeconfig locally
+          copy:
+            content: "{{ kubeconfig.stdout }}"
+            dest: "kubeconfig"
+            mode: '0600'
+          tags:
+            - deploy
+            - info
+
+        - name: Display cluster information
+          debug:
+            msg: |
+              K3s cluster deployed successfully!
+              
+              Cluster Information:
+              - Master Node: k3s-master
+              - Worker Nodes: {{ groups['k3s_workers'] | default([]) }}
+              - Kubeconfig saved to: ./kubeconfig
+              
+              Next steps:
+              1. Use kubectl with the config: kubectl --kubeconfig kubeconfig get nodes
+              2. Access the master: multipass shell k3s-master
+              3. To destroy: ansible-playbook -i inventory/{{ inventory_file | basename }} playbook.yml --tags destroy
+          tags:
+            - deploy
+            - info

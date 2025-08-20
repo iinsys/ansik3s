@@ -1,0 +1,24 @@
+---
+# Global variables for k3s cluster deployment
+
+# VM Configuration
+vm_image: "22.04"
+vm_cpu: 2
+vm_memory: "4G"
+vm_disk: "10G"
+
+# Network Configuration
+vm_network: "10.0.0.0/24"
+master_ip: "10.0.0.10"
+worker_start_ip: "10.0.0.20"
+
+# K3s Configuration
+k3s_version: "v1.28.5+k3s1"
+k3s_token: "{{ lookup('password', '/dev/null length=64 chars=ascii_letters,digits') }}"
+
+# Cluster Configuration
+worker_nodes: 2  # Default number of worker nodes for multi-node setup
+
+# Multipass Configuration
+multipass_timeout: 300
+multipass_retries: 3

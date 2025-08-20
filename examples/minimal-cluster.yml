@@ -1,0 +1,24 @@
+---
+# Minimal cluster configuration
+# Use this for systems with limited resources
+
+# VM Configuration - Minimal resources
+vm_image: "22.04"
+vm_cpu: 1          # Single CPU core
+vm_memory: "2G"     # Minimal memory
+vm_disk: "8G"       # Smaller disk
+
+# Network Configuration - Default network
+vm_network: "10.0.0.0/24"
+master_ip: "10.0.0.10"
+worker_start_ip: "10.0.0.20"
+
+# K3s Configuration - Stable version
+k3s_version: "v1.28.5+k3s1"
+
+# Cluster Configuration - Single worker
+worker_nodes: 1
+
+# Multipass Configuration - Standard timeouts
+multipass_timeout: 300
+multipass_retries: 3

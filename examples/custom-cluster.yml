@@ -1,0 +1,24 @@
+---
+# Example custom cluster configuration
+# Copy this file and modify as needed
+
+# VM Configuration
+vm_image: "22.04"
+vm_cpu: 4          # More CPU for development
+vm_memory: "8G"     # More memory for development
+vm_disk: "20G"      # Larger disk
+
+# Network Configuration
+vm_network: "192.168.1.0/24"  # Custom network
+master_ip: "192.168.1.10"
+worker_start_ip: "192.168.1.20"
+
+# K3s Configuration
+k3s_version: "v1.29.0+k3s1"  # Latest version
+
+# Cluster Configuration
+worker_nodes: 3  # More worker nodes
+
+# Multipass Configuration
+multipass_timeout: 600  # Longer timeout for larger VMs
+multipass_retries: 5

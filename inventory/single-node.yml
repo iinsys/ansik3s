@@ -1,0 +1,17 @@
+---
+all:
+  children:
+    k3s_cluster:
+      children:
+        k3s_masters:
+          hosts:
+            k3s-master:
+              ansible_connection: local
+              ansible_python_interpreter: "{{ ansible_playbook_python }}"
+              vm_ip: "{{ master_ip }}"
+              vm_role: "master"
+        k3s_workers:
+          hosts: {}  # No separate workers in single-node setup
+  vars:
+    cluster_type: "single-node"
+    worker_nodes: 0

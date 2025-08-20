@@ -1,0 +1,24 @@
+---
+# Development cluster configuration
+# Use this for development and testing with more resources
+
+# VM Configuration - More resources for development
+vm_image: "22.04"
+vm_cpu: 4          # More CPU cores for faster builds
+vm_memory: "8G"     # More memory for running multiple services
+vm_disk: "20G"      # Larger disk for storing images and data
+
+# Network Configuration - Isolated development network
+vm_network: "192.168.100.0/24"  # Separate subnet for development
+master_ip: "192.168.100.10"
+worker_start_ip: "192.168.100.20"
+
+# K3s Configuration - Latest stable version
+k3s_version: "v1.29.0+k3s1"
+
+# Cluster Configuration - 2 workers for development
+worker_nodes: 2
+
+# Multipass Configuration - Longer timeouts for larger VMs
+multipass_timeout: 600
+multipass_retries: 5

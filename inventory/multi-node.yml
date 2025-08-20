@@ -1,0 +1,27 @@
+---
+all:
+  children:
+    k3s_cluster:
+      children:
+        k3s_masters:
+          hosts:
+            k3s-master:
+              ansible_connection: local
+              ansible_python_interpreter: "{{ ansible_playbook_python }}"
+              vm_ip: "{{ master_ip }}"
+              vm_role: "master"
+        k3s_workers:
+          hosts:
+            k3s-worker-1:
+              ansible_connection: local
+              ansible_python_interpreter: "{{ ansible_playbook_python }}"
+              vm_ip: "{{ worker_start_ip }}"
+              vm_role: "worker"
+            k3s-worker-2:
+              ansible_connection: local
+              ansible_python_interpreter: "{{ ansible_playbook_python }}"
+              vm_ip: "{{ worker_start_ip | int + 1 }}"
+              vm_role: "worker"
+  vars:
+    cluster_type: "multi-node"
+    worker_nodes: 2

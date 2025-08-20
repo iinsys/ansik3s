@@ -1,0 +1,114 @@
+---
+- name: Check if VMs already exist
+  command: multipass list --format json
+  register: existing_vms
+  changed_when: false
+  failed_when: false
+
+- name: Parse existing VMs
+  set_fact:
+    existing_vm_names: "{{ (existing_vms.stdout | from_json).list | map(attribute='name') | list }}"
+  when: existing_vms.rc == 0
+
+- name: Create master VM
+  block:
+    - name: Launch master VM
+      command: >
+        multipass launch {{ vm_image }}
+        --name k3s-master
+        --cpus {{ vm_cpu }}
+        --memory {{ vm_memory }}
+        --disk {{ vm_disk }}
+        --network name=default,mode=manual
+        --network name=default,mode=manual,subnet={{ vm_network }}
+      register: master_launch
+      retries: "{{ multipass_retries }}"
+      delay: 10
+      until: master_launch.rc == 0
+
+    - name: Wait for master VM to be ready
+      pause:
+        seconds: 30
+
+    - name: Configure master VM network
+      command: >
+        multipass exec k3s-master -- sudo ip addr add {{ master_ip }}/24 dev eth0
+      when: cluster_type == "multi-node"
+
+  when: "'k3s-master' not in (existing_vm_names | default([]))"
+  tags:
+    - deploy
+    - multipass
+
+- name: Create worker VMs
+  block:
+    - name: Launch worker VM {{ item }}
+      command: >
+        multipass launch {{ vm_image }}
+        --name {{ item }}
+        --cpus {{ vm_cpu }}
+        --memory {{ vm_memory }}
+        --disk {{ vm_disk }}
+        --network name=default,mode=manual
+        --network name=default,mode=manual,subnet={{ vm_network }}
+      register: worker_launch
+      retries: "{{ multipass_retries }}"
+      delay: 10
+      until: worker_launch.rc == 0
+
+    - name: Wait for worker VM {{ item }} to be ready
+      pause:
+        seconds: 30
+
+    - name: Configure worker VM {{ item }} network
+      command: >
+        multipass exec {{ item }} -- sudo ip addr add {{ hostvars[item].vm_ip }}/24 dev eth0
+
+  when: 
+    - cluster_type == "multi-node"
+    - item not in (existing_vm_names | default([]))
+  loop: "{{ groups['k3s_workers'] }}"
+  tags:
+    - deploy
+    - multipass
+
+- name: Update all VMs
+  block:
+    - name: Update master VM
+      command: multipass exec k3s-master -- sudo apt update && sudo apt upgrade -y
+      register: master_update
+      retries: 3
+      delay: 5
+      until: master_update.rc == 0
+
+    - name: Update worker VMs
+      command: multipass exec {{ item }} -- sudo apt update && sudo apt upgrade -y
+      register: worker_update
+      retries: 3
+      delay: 5
+      until: worker_update.rc == 0
+      loop: "{{ groups['k3s_workers'] }}"
+      when: cluster_type == "multi-node"
+
+  tags:
+    - deploy
+    - multipass
+
+- name: Display VM status
+  command: multipass list
+  register: vm_status
+  changed_when: false
+  tags:
+    - deploy
+    - multipass
+    - info
+
+    - name: Show VM information
+      debug:
+        msg: |
+          VM Status:
+          {{ vm_status.stdout }}
+      tags:
+        - deploy
+        - multipass
+        - info
