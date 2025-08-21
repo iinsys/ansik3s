@@ -4,6 +4,8 @@
   gather_facts: false
   vars_files:
     - group_vars/all.yml
+  vars:
+    playbook_mode: "{{ playbook_mode | default('deploy') }}"
   
   tasks:
     - name: Check prerequisites
@@ -38,7 +40,6 @@
       tags:
         - deploy
         - k3s
-      when: inventory_hostname in groups['k3s_masters'] or inventory_hostname in groups['k3s_workers']
 
 - name: Destroy k3s cluster
   hosts: localhost
@@ -68,7 +69,7 @@
     - name: Get cluster status
       block:
         - name: Get kubeconfig from master
-          command: multipass exec k3s-master -- cat /etc/rancher/k3s/k3s.yaml
+          command: snap run multipass exec k3s-master -- sudo cat /etc/rancher/k3s/k3s.yaml
           register: kubeconfig
           changed_when: false
           tags:
@@ -80,6 +81,12 @@
             content: "{{ kubeconfig.stdout }}"
             dest: "kubeconfig"
             mode: '0600'
+
+        - name: Update kubeconfig server address
+          replace:
+            path: kubeconfig
+            regexp: 'server: https://127.0.0.1:6443'
+            replace: 'server: https://10.82.44.102:6443'
           tags:
             - deploy
             - info
@@ -96,8 +103,8 @@
               
               Next steps:
               1. Use kubectl with the config: kubectl --kubeconfig kubeconfig get nodes
-              2. Access the master: multipass shell k3s-master
-              3. To destroy: ansible-playbook -i inventory/{{ inventory_file | basename }} playbook.yml --tags destroy
+              2. Access the master: snap run multipass shell k3s-master
+              3. To destroy: ansible-playbook -i inventory/single-node.yml playbook.yml --tags destroy
           tags:
             - deploy
             - info

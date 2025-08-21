@@ -2,11 +2,10 @@
 - name: Install k3s on master node
   block:
     - name: Download and install k3s on master
-      command: >
-        multipass exec k3s-master -- 
+      shell: >
+        snap run multipass exec k3s-master -- 
         curl -sfL https://get.k3s.io | 
         INSTALL_K3S_VERSION={{ k3s_version }} 
-        INSTALL_K3S_EXEC="--node-ip={{ master_ip }} --flannel-iface=eth0" 
         sh -
       register: k3s_install
       retries: 3
@@ -14,14 +13,14 @@
       until: k3s_install.rc == 0
 
     - name: Wait for k3s to be ready on master
-      command: multipass exec k3s-master -- sudo k3s kubectl get nodes
+      command: snap run multipass exec k3s-master -- sudo k3s kubectl get nodes
       register: k3s_ready
       retries: 10
       delay: 30
       until: k3s_ready.rc == 0
 
     - name: Get k3s token from master
-      command: multipass exec k3s-master -- sudo cat /var/lib/rancher/k3s/server/node-token
+      command: snap run multipass exec k3s-master -- sudo cat /var/lib/rancher/k3s/server/node-token
       register: k3s_token_output
       changed_when: false
 
@@ -33,31 +32,33 @@
     - deploy
     - k3s
 
-- name: Install k3s on worker nodes
-  block:
-    - name: Download and install k3s on worker {{ item }}
-      command: >
-        multipass exec {{ item }} -- 
-        curl -sfL https://get.k3s.io | 
-        K3S_URL=https://{{ master_ip }}:6443 
-        K3S_TOKEN={{ k3s_token }} 
-        INSTALL_K3S_VERSION={{ k3s_version }}
-        INSTALL_K3S_EXEC="--node-ip={{ hostvars[item].vm_ip }} --flannel-iface=eth0" 
-        sh -
-      register: k3s_worker_install
-      retries: 3
-      delay: 10
-      until: k3s_worker_install.rc == 0
-
-    - name: Wait for worker {{ item }} to join cluster
-      command: multipass exec k3s-master -- sudo k3s kubectl get nodes
-      register: worker_joined
-      retries: 15
-      delay: 20
-      until: "'{{ item }}' in worker_joined.stdout"
-
-  when: cluster_type == "multi-node"
+- name: Download and install k3s on worker nodes
+  shell: >
+    multipass exec {{ item }} -- 
+    curl -sfL https://get.k3s.io | 
+    K3S_URL=https://{{ master_ip }}:6443 
+    K3S_TOKEN={{ k3s_token }} 
+    INSTALL_K3S_VERSION={{ k3s_version }}
+    INSTALL_K3S_EXEC="--node-ip={{ hostvars[item].vm_ip }} --flannel-iface=eth0" 
+    sh -
+  register: k3s_worker_install
+  retries: 3
+  delay: 10
+  until: k3s_worker_install.rc == 0
   loop: "{{ groups['k3s_workers'] }}"
+  when: cluster_type == "multi-node"
+  tags:
+    - deploy
+    - k3s
+
+- name: Wait for worker nodes to join cluster
+  command: multipass exec k3s-master -- sudo k3s kubectl get nodes
+  register: worker_joined
+  retries: 15
+  delay: 20
+  until: "'{{ item }}' in worker_joined.stdout"
+  loop: "{{ groups['k3s_workers'] }}"
+  when: cluster_type == "multi-node"
   tags:
     - deploy
     - k3s
