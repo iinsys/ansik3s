@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: test-pvc
+  namespace: test-cluster
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 100Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-test
+  namespace: test-cluster
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: storage-test
+  template:
+    metadata:
+      labels:
+        app: storage-test
+    spec:
+      containers:
+      - name: busybox
+        image: busybox:latest
+        command: ["/bin/sh"]
+        args: ["-c", "while true; do echo 'Hello from storage test' >> /data/test.txt; sleep 30; done"]
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "25m"
+          limits:
+            memory: "64Mi"
+            cpu: "50m"
+        volumeMounts:
+        - name: test-storage
+          mountPath: /data
+      volumes:
+      - name: test-storage
+        persistentVolumeClaim:
+          claimName: test-pvc 

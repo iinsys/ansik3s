@@ -44,7 +44,7 @@
 
 - name: Configure master VM network
   command: >
-    snap run multipass exec k3s-master -- sudo ip addr add {{ master_ip }}/24 dev eth0
+    snap run multipass exec k3s-master -- sudo ip addr add {{ master_ip }}/24 dev ens3
   when: 
     - cluster_type == "multi-node"
     - "'k3s-master' not in (existing_vm_names | default([]))"
@@ -85,7 +85,7 @@
 
 - name: Configure worker VM networks
   command: >
-    snap run multipass exec {{ item }} -- sudo ip addr add {{ hostvars[item].vm_ip }}/24 dev eth0
+    snap run multipass exec {{ item }} -- sudo ip addr add {{ hostvars[item].vm_ip }}/24 dev ens3
   loop: "{{ groups['k3s_workers'] }}"
   when: 
     - cluster_type == "multi-node"

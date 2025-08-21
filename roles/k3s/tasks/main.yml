@@ -73,11 +73,12 @@
   shell: >
     snap run multipass exec {{ item }} -- 
     bash -c '
-    K3S_URL=https://{{ master_vm_ip.stdout | default("127.0.0.1") }}:6443
-    K3S_TOKEN={{ k3s_token }}
-    INSTALL_K3S_VERSION={{ k3s_version }}
-    INSTALL_K3S_EXEC="--node-ip={{ hostvars[item].vm_ip }} --flannel-iface=ens3"
-    curl -sfL https://get.k3s.io | sh -
+    curl -sfL https://get.k3s.io | 
+    INSTALL_K3S_VERSION={{ k3s_version }} 
+    K3S_URL=https://{{ master_vm_ip.stdout | default("127.0.0.1") }}:6443 
+    K3S_TOKEN={{ k3s_token }} 
+    INSTALL_K3S_EXEC="agent --node-ip={{ hostvars[item].vm_ip }} --flannel-iface=ens3" 
+    sh -
     '
   register: k3s_worker_install
   retries: 2
