@@ -70,21 +70,23 @@ sudo apt install ansible
    
    **For a single-node cluster:**
    ```bash
-   ansible-playbook -i inventory/single-node.yml playbook.yml
+   ansible-playbook -i inventory/single-node.yml playbook.yml --tags deploy
    ```
    
    **For a multi-node cluster:**
    ```bash
-   ansible-playbook -i inventory/multi-node.yml playbook.yml
+   ansible-playbook -i inventory/multi-node.yml playbook.yml --tags deploy
    ```
 
 3. **Access your cluster:**
    ```bash
-   # Get the kubeconfig
-   multipass exec k3s-master -- cat /etc/rancher/k3s/k3s.yaml > kubeconfig
-   
+   # The kubeconfig is automatically generated and saved locally
    # Use kubectl with the config
    kubectl --kubeconfig kubeconfig get nodes
+   
+   # Or access the master node directly (no sudo needed)
+   snap run multipass shell k3s-master
+   kubectl get nodes
    ```
 
 ## Configuration
@@ -122,10 +124,10 @@ ansik3s/
 
 ```bash
 # Deploy single-node cluster
-ansible-playbook -i inventory/single-node.yml playbook.yml
+ansible-playbook -i inventory/single-node.yml playbook.yml --tags deploy
 
 # Deploy multi-node cluster
-ansible-playbook -i inventory/multi-node.yml playbook.yml
+ansible-playbook -i inventory/multi-node.yml playbook.yml --tags deploy
 
 # Destroy cluster
 ansible-playbook -i inventory/single-node.yml playbook.yml --tags destroy
@@ -135,7 +137,7 @@ ansible-playbook -i inventory/single-node.yml playbook.yml --tags destroy
 
 ```bash
 # Deploy with custom variables
-ansible-playbook -i inventory/multi-node.yml playbook.yml \
+ansible-playbook -i inventory/multi-node.yml playbook.yml --tags deploy \
   -e "worker_nodes=3" \
   -e "vm_memory=4G" \
   -e "vm_cpu=2"
@@ -160,7 +162,7 @@ For detailed guides and examples, see the [docs/](docs/) directory:
 
 ```bash
 # Run with verbose output
-ansible-playbook -i inventory/single-node.yml playbook.yml -vvv
+ansible-playbook -i inventory/single-node.yml playbook.yml --tags deploy -vvv
 
 # Check VM status
 multipass list

@@ -82,11 +82,19 @@
             dest: "kubeconfig"
             mode: '0600'
 
+        - name: Get master VM IP address
+          shell: snap run multipass exec k3s-master -- ip route get 1 | awk '{print $7}' | head -1
+          register: master_vm_ip
+          changed_when: false
+          tags:
+            - deploy
+            - info
+
         - name: Update kubeconfig server address
           replace:
             path: kubeconfig
             regexp: 'server: https://127.0.0.1:6443'
-            replace: 'server: https://10.82.44.102:6443'
+            replace: 'server: https://{{ master_vm_ip.stdout }}:6443'
           tags:
             - deploy
             - info
@@ -102,9 +110,10 @@
               - Kubeconfig saved to: ./kubeconfig
               
               Next steps:
-              1. Use kubectl with the config: kubectl --kubeconfig kubeconfig get nodes
+              1. Use kubectl locally: kubectl --kubeconfig kubeconfig get nodes
               2. Access the master: snap run multipass shell k3s-master
-              3. To destroy: ansible-playbook -i inventory/single-node.yml playbook.yml --tags destroy
+              3. Use kubectl on master (no sudo needed): kubectl get nodes
+              4. To destroy: ansible-playbook -i inventory/single-node.yml playbook.yml --tags destroy
           tags:
             - deploy
             - info

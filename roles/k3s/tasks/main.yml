@@ -4,19 +4,21 @@
     - name: Download and install k3s on master
       shell: >
         snap run multipass exec k3s-master -- 
+        bash -c '
         curl -sfL https://get.k3s.io | 
         INSTALL_K3S_VERSION={{ k3s_version }} 
         sh -
+        '
       register: k3s_install
-      retries: 3
-      delay: 10
+      retries: 2
+      delay: 5
       until: k3s_install.rc == 0
 
     - name: Wait for k3s to be ready on master
-      command: snap run multipass exec k3s-master -- sudo k3s kubectl get nodes
+      command: snap run multipass exec k3s-master -- /usr/local/bin/k3s kubectl get nodes
       register: k3s_ready
-      retries: 10
-      delay: 30
+      retries: 5
+      delay: 15
       until: k3s_ready.rc == 0
 
     - name: Get k3s token from master
@@ -28,22 +30,58 @@
       set_fact:
         k3s_token: "{{ k3s_token_output.stdout }}"
 
+    - name: Configure kubectl access for ubuntu user
+      shell: |
+        snap run multipass exec k3s-master -- bash -c '
+        sudo mkdir -p /home/ubuntu/.kube
+        sudo cp /etc/rancher/k3s/k3s.yaml /home/ubuntu/.kube/config
+        sudo chown ubuntu:ubuntu /home/ubuntu/.kube/config
+        sudo chmod 600 /home/ubuntu/.kube/config
+        
+        # Set up environment variables and aliases
+        if ! grep -q "KUBECONFIG" /home/ubuntu/.bashrc; then
+          echo "export KUBECONFIG=/home/ubuntu/.kube/config" >> /home/ubuntu/.bashrc
+          echo "alias k=\"kubectl\"" >> /home/ubuntu/.bashrc
+        fi
+        
+        if ! grep -q "KUBECONFIG" /home/ubuntu/.profile; then
+          echo "export KUBECONFIG=/home/ubuntu/.kube/config" >> /home/ubuntu/.profile
+        fi
+        
+        # Also set global kubeconfig permissions for easier access
+        sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+        '
+
   tags:
     - deploy
     - k3s
 
+- name: Get master VM IP address
+  shell: snap run multipass exec k3s-master -- ip route get 1 | awk '{print $7}' | head -1
+  register: master_vm_ip
+  changed_when: false
+  when: cluster_type == "multi-node"
+
+- name: Get worker VM IP addresses
+  shell: snap run multipass exec {{ item }} -- ip route get 1 | awk '{print $7}' | head -1
+  register: worker_vm_ips
+  changed_when: false
+  loop: "{{ groups['k3s_workers'] }}"
+  when: cluster_type == "multi-node"
+
 - name: Download and install k3s on worker nodes
   shell: >
-    multipass exec {{ item }} -- 
-    curl -sfL https://get.k3s.io | 
-    K3S_URL=https://{{ master_ip }}:6443 
-    K3S_TOKEN={{ k3s_token }} 
+    snap run multipass exec {{ item }} -- 
+    bash -c '
+    K3S_URL=https://{{ master_vm_ip.stdout | default("127.0.0.1") }}:6443
+    K3S_TOKEN={{ k3s_token }}
     INSTALL_K3S_VERSION={{ k3s_version }}
-    INSTALL_K3S_EXEC="--node-ip={{ hostvars[item].vm_ip }} --flannel-iface=eth0" 
-    sh -
+    INSTALL_K3S_EXEC="--node-ip={{ hostvars[item].vm_ip }} --flannel-iface=ens3"
+    curl -sfL https://get.k3s.io | sh -
+    '
   register: k3s_worker_install
-  retries: 3
-  delay: 10
+  retries: 2
+  delay: 5
   until: k3s_worker_install.rc == 0
   loop: "{{ groups['k3s_workers'] }}"
   when: cluster_type == "multi-node"
@@ -52,11 +90,11 @@
     - k3s
 
 - name: Wait for worker nodes to join cluster
-  command: multipass exec k3s-master -- sudo k3s kubectl get nodes
+  command: snap run multipass exec k3s-master -- /usr/local/bin/k3s kubectl get nodes
   register: worker_joined
-  retries: 15
-  delay: 20
-  until: "'{{ item }}' in worker_joined.stdout"
+  retries: 8
+  delay: 10
+  until: "item in worker_joined.stdout"
   loop: "{{ groups['k3s_workers'] }}"
   when: cluster_type == "multi-node"
   tags:
@@ -66,45 +104,12 @@
 - name: Configure kubectl access
   block:
     - name: Get kubeconfig from master
-      command: multipass exec k3s-master -- sudo cat /etc/rancher/k3s/k3s.yaml
+      command: snap run multipass exec k3s-master -- sudo cat /etc/rancher/k3s/k3s.yaml
       register: kubeconfig_content
       changed_when: false
 
-    - name: Update kubeconfig with correct server address
-      replace:
-        path: kubeconfig
-        regexp: 'server: https://127.0.0.1:6443'
-        replace: 'server: https://{{ master_ip }}:6443'
-      when: cluster_type == "multi-node"
+    # Note: kubeconfig server address update is handled in the main playbook
 
   tags:
     - deploy
     - k3s
-
-- name: Verify cluster status
-  block:
-    - name: Check cluster nodes
-      command: multipass exec k3s-master -- sudo k3s kubectl get nodes -o wide
-      register: cluster_nodes
-      changed_when: false
-
-    - name: Check cluster pods
-      command: multipass exec k3s-master -- sudo k3s kubectl get pods --all-namespaces
-      register: cluster_pods
-      changed_when: false
-
-    - name: Display cluster status
-      debug:
-        msg: |
-          K3s Cluster Status:
-          
-          Nodes:
-          {{ cluster_nodes.stdout }}
-          
-          Pods:
-          {{ cluster_pods.stdout }}
-
-  tags:
-    - deploy
-    - k3s
-    - info

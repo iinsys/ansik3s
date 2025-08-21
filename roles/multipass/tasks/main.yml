@@ -26,8 +26,8 @@
     --memory {{ vm_memory }}
     --disk {{ vm_disk }}
   register: master_launch
-  retries: "{{ multipass_retries }}"
-  delay: 10
+  retries: 3
+  delay: 5
   until: master_launch.rc == 0
   when: "'k3s-master' not in (existing_vm_names | default([]))"
   tags:
@@ -52,9 +52,6 @@
     - deploy
     - multipass
 
-- name: Debug condition
-  debug:
-    msg: "Should create master VM: {{ 'k3s-master' not in (existing_vm_names | default([])) }}"
 
 - name: Launch worker VMs
   command: >
@@ -64,8 +61,8 @@
     --memory {{ vm_memory }}
     --disk {{ vm_disk }}
   register: worker_launch
-  retries: "{{ multipass_retries }}"
-  delay: 10
+  retries: 3
+  delay: 5
   until: worker_launch.rc == 0
   loop: "{{ groups['k3s_workers'] }}"
   when: 
@@ -99,18 +96,25 @@
 
 - name: Update all VMs
   block:
+    - name: Configure sudo access for ubuntu user
+      shell: snap run multipass exec k3s-master -- sudo usermod -aG sudo ubuntu
+      register: sudo_config
+      retries: 2
+      delay: 3
+      until: sudo_config.rc == 0
+
     - name: Update master VM
       shell: snap run multipass exec k3s-master -- sudo apt update && sudo apt upgrade -y
       register: master_update
-      retries: 3
-      delay: 5
+      retries: 2
+      delay: 3
       until: master_update.rc == 0
 
     - name: Update worker VMs
       shell: snap run multipass exec {{ item }} -- sudo apt update && sudo apt upgrade -y
       register: worker_update
-      retries: 3
-      delay: 5
+      retries: 2
+      delay: 3
       until: worker_update.rc == 0
       loop: "{{ groups['k3s_workers'] }}"
       when: cluster_type == "multi-node"
