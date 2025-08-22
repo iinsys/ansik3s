@@ -16,7 +16,7 @@ worker_start_ip: "10.0.0.20"  # Reference only - actual IPs will be DHCP assigne
 worker_ip_base: 20  # Reference only
 
 # K3s Configuration
-k3s_version: "v1.28.5+k3s1"
+k3s_version: "v1.33.3+k3s1"
 k3s_token: "{{ lookup('password', '/dev/null length=64 chars=ascii_letters,digits') }}"
 
 # Cluster Configuration

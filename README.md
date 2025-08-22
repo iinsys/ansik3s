@@ -191,7 +191,7 @@ This project uses GitHub Actions for automated quality assurance and maintenance
 - **Schedule**: Monthly (1st of every month)
 - **Purpose**: Automatically checks for k3s version updates
 - **Action**: Creates pull requests when newer versions are available
-- **Current**: v1.28.5+k3s1 (Latest: v1.33.3+k3s1)
+- **Current**: v1.33.3+k3s1 (Latest: v1.33.3+k3s1)
 
 For more details, see:
 - [CI/CD Pipeline Documentation](docs/github-actions.md)
