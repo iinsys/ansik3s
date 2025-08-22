@@ -1,0 +1,66 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint-and-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Validate Ansible playbook syntax
+        run: |
+          echo "Checking Ansible playbook syntax..."
+          ansible-playbook -i inventory/single-node.yml playbook.yml --syntax-check
+          ansible-playbook -i inventory/multi-node.yml playbook.yml --syntax-check
+
+      - name: Validate inventory files
+        run: |
+          echo "Validating inventory files..."
+          ansible-inventory -i inventory/single-node.yml --list
+          ansible-inventory -i inventory/multi-node.yml --list
+
+      - name: Check YAML syntax
+        run: |
+          echo "Checking YAML syntax..."
+          python -c "import yaml; yaml.safe_load(open('playbook.yml'))"
+          python -c "import yaml; yaml.safe_load(open('inventory/single-node.yml'))"
+          python -c "import yaml; yaml.safe_load(open('inventory/multi-node.yml'))"
+          python -c "import yaml; yaml.safe_load(open('group_vars/all.yml'))"
+
+      - name: Check shell script syntax
+        run: |
+          echo "Checking shell script syntax..."
+          bash -n setup.sh
+          bash -n test-setup.sh
+          bash -n k8s/test-cluster.sh
+          bash -n k8s/cleanup-test.sh
+          bash -n k8s/imperative-test.sh
+          bash -n k8s/cleanup-imperative.sh
+
+      - name: Check file permissions
+        run: |
+          echo "Checking file permissions..."
+          chmod +x k8s/*.sh
+          chmod +x setup.sh
+          chmod +x test-setup.sh
+
+      - name: Validate requirements.txt
+        run: |
+          echo "Validating requirements.txt..."
+          pip check 
