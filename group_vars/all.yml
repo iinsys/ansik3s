@@ -8,11 +8,12 @@ vm_memory: "4G"
 vm_disk: "10G"
 
 # Network Configuration
-vm_network: "10.0.0.0/24"
-# Note: Actual IPs will be dynamically assigned by multipass
-# These are just for reference and inventory purposes
-master_ip: "10.0.0.10"
-worker_start_ip: "10.0.0.20"
+# Note: Using Multipass DHCP IPs for better reliability
+# Multipass automatically assigns IPs in the 10.82.x.x range
+# These variables are kept for inventory structure but actual IPs are dynamic
+master_ip: "10.0.0.10"  # Reference only - actual IP will be DHCP assigned
+worker_start_ip: "10.0.0.20"  # Reference only - actual IPs will be DHCP assigned
+worker_ip_base: 20  # Reference only
 
 # K3s Configuration
 k3s_version: "v1.28.5+k3s1"
@@ -24,3 +25,6 @@ worker_nodes: 2  # Default number of worker nodes for multi-node setup
 # Multipass Configuration
 multipass_timeout: 300
 multipass_retries: 3
+
+# Performance Configuration
+perform_system_updates: false  # Set to true if you want full system updates (slower)

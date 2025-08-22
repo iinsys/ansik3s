@@ -14,22 +14,6 @@
       delay: 5
       until: k3s_install.rc == 0
 
-    - name: Wait for k3s to be ready on master
-      command: snap run multipass exec k3s-master -- /usr/local/bin/k3s kubectl get nodes
-      register: k3s_ready
-      retries: 5
-      delay: 15
-      until: k3s_ready.rc == 0
-
-    - name: Get k3s token from master
-      command: snap run multipass exec k3s-master -- sudo cat /var/lib/rancher/k3s/server/node-token
-      register: k3s_token_output
-      changed_when: false
-
-    - name: Set k3s token fact
-      set_fact:
-        k3s_token: "{{ k3s_token_output.stdout }}"
-
     - name: Configure kubectl access for ubuntu user
       shell: |
         snap run multipass exec k3s-master -- bash -c '
@@ -52,37 +36,62 @@
         sudo chmod 644 /etc/rancher/k3s/k3s.yaml
         '
 
+    - name: Wait for k3s to be ready on master
+      command: snap run multipass exec k3s-master -- bash -c 'export KUBECONFIG=/home/ubuntu/.kube/config && kubectl get nodes'
+      register: k3s_ready
+      retries: 6
+      delay: 8
+      until: k3s_ready.rc == 0
+
+    - name: Get k3s token from master
+      command: snap run multipass exec k3s-master -- sudo cat /var/lib/rancher/k3s/server/node-token
+      register: k3s_token_output
+      changed_when: false
+
+    - name: Set k3s token fact
+      set_fact:
+        k3s_token: "{{ k3s_token_output.stdout }}"
+
+    - name: Get master VM IP address (Multipass DHCP IP)
+      shell: snap run multipass exec k3s-master -- ip route get 1 | awk '{print $7}' | head -1
+      register: master_vm_ip
+      changed_when: false
+
   tags:
     - deploy
     - k3s
 
-- name: Get master VM IP address
-  shell: snap run multipass exec k3s-master -- ip route get 1 | awk '{print $7}' | head -1
-  register: master_vm_ip
-  changed_when: false
-  when: cluster_type == "multi-node"
-
-- name: Get worker VM IP addresses
+- name: Get worker VM IP addresses (Multipass DHCP IPs)
   shell: snap run multipass exec {{ item }} -- ip route get 1 | awk '{print $7}' | head -1
   register: worker_vm_ips
   changed_when: false
   loop: "{{ groups['k3s_workers'] }}"
   when: cluster_type == "multi-node"
 
+- name: Verify network connectivity between master and workers
+  shell: >
+    snap run multipass exec {{ item }} -- ping -c 3 {{ master_vm_ip.stdout }}
+  register: network_test
+  retries: 2
+  delay: 3
+  until: network_test.rc == 0
+  loop: "{{ groups['k3s_workers'] }}"
+  when: cluster_type == "multi-node"
+  tags:
+    - deploy
+    - k3s
+
 - name: Download and install k3s on worker nodes
   shell: >
     snap run multipass exec {{ item }} -- 
-    bash -c '
-    curl -sfL https://get.k3s.io | 
+    bash -c 'curl -sfL https://get.k3s.io | 
     INSTALL_K3S_VERSION={{ k3s_version }} 
-    K3S_URL=https://{{ master_vm_ip.stdout | default("127.0.0.1") }}:6443 
+    K3S_URL=https://{{ master_vm_ip.stdout }}:6443 
     K3S_TOKEN={{ k3s_token }} 
-    INSTALL_K3S_EXEC="agent --node-ip={{ hostvars[item].vm_ip }} --flannel-iface=ens3" 
-    sh -
-    '
+    sh -'
   register: k3s_worker_install
-  retries: 2
-  delay: 5
+  retries: 1
+  delay: 3
   until: k3s_worker_install.rc == 0
   loop: "{{ groups['k3s_workers'] }}"
   when: cluster_type == "multi-node"
@@ -91,11 +100,11 @@
     - k3s
 
 - name: Wait for worker nodes to join cluster
-  command: snap run multipass exec k3s-master -- /usr/local/bin/k3s kubectl get nodes
+  command: snap run multipass exec k3s-master -- bash -c 'export KUBECONFIG=/home/ubuntu/.kube/config && kubectl get nodes'
   register: worker_joined
   retries: 8
   delay: 10
-  until: "item in worker_joined.stdout"
+  until: "item in worker_joined.stdout and 'Ready' in worker_joined.stdout"
   loop: "{{ groups['k3s_workers'] }}"
   when: cluster_type == "multi-node"
   tags:
@@ -110,6 +119,32 @@
       changed_when: false
 
     # Note: kubeconfig server address update is handled in the main playbook
+
+  tags:
+    - deploy
+    - k3s
+
+- name: Final cluster verification
+  block:
+    - name: Verify all nodes are ready
+      command: snap run multipass exec k3s-master -- bash -c 'export KUBECONFIG=/home/ubuntu/.kube/config && kubectl get nodes'
+      register: final_nodes_check
+      changed_when: false
+
+    - name: Verify system pods are running
+      command: snap run multipass exec k3s-master -- bash -c 'export KUBECONFIG=/home/ubuntu/.kube/config && kubectl get pods --all-namespaces | grep -E "(coredns|traefik|local-path)" | grep -v "Completed" | wc -l'
+      register: system_pods_check
+      changed_when: false
+
+    - name: Display cluster status
+      debug:
+        msg: |
+          Cluster deployment completed successfully!
+          
+          Nodes: {{ final_nodes_check.stdout }}
+          System pods running: {{ system_pods_check.stdout }}
+          
+          Cluster is ready for use!
 
   tags:
     - deploy

@@ -76,16 +76,19 @@
             - deploy
             - info
 
-        - name: Save kubeconfig locally
-          copy:
-            content: "{{ kubeconfig.stdout }}"
-            dest: "kubeconfig"
-            mode: '0600'
-
         - name: Get master VM IP address
           shell: snap run multipass exec k3s-master -- ip route get 1 | awk '{print $7}' | head -1
           register: master_vm_ip
           changed_when: false
+          tags:
+            - deploy
+            - info
+
+        - name: Save kubeconfig locally
+          copy:
+            content: "{{ kubeconfig.stdout }}"
+            dest: kubeconfig
+            mode: '0600'
           tags:
             - deploy
             - info

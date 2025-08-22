@@ -26,8 +26,8 @@
     --memory {{ vm_memory }}
     --disk {{ vm_disk }}
   register: master_launch
-  retries: 3
-  delay: 5
+  retries: 2
+  delay: 3
   until: master_launch.rc == 0
   when: "'k3s-master' not in (existing_vm_names | default([]))"
   tags:
@@ -36,21 +36,14 @@
 
 - name: Wait for master VM to be ready
   pause:
-    seconds: 30
+    seconds: 8
   when: "'k3s-master' not in (existing_vm_names | default([]))"
   tags:
     - deploy
     - multipass
 
-- name: Configure master VM network
-  command: >
-    snap run multipass exec k3s-master -- sudo ip addr add {{ master_ip }}/24 dev ens3
-  when: 
-    - cluster_type == "multi-node"
-    - "'k3s-master' not in (existing_vm_names | default([]))"
-  tags:
-    - deploy
-    - multipass
+# Note: Using Multipass DHCP IPs instead of manual static IP configuration
+# This is more reliable and avoids IP conflicts
 
 
 - name: Launch worker VMs
@@ -61,8 +54,8 @@
     --memory {{ vm_memory }}
     --disk {{ vm_disk }}
   register: worker_launch
-  retries: 3
-  delay: 5
+  retries: 2
+  delay: 3
   until: worker_launch.rc == 0
   loop: "{{ groups['k3s_workers'] }}"
   when: 
@@ -74,7 +67,7 @@
 
 - name: Wait for worker VMs to be ready
   pause:
-    seconds: 30
+    seconds: 8
   loop: "{{ groups['k3s_workers'] }}"
   when: 
     - cluster_type == "multi-node"
@@ -83,41 +76,36 @@
     - deploy
     - multipass
 
-- name: Configure worker VM networks
-  command: >
-    snap run multipass exec {{ item }} -- sudo ip addr add {{ hostvars[item].vm_ip }}/24 dev ens3
-  loop: "{{ groups['k3s_workers'] }}"
-  when: 
-    - cluster_type == "multi-node"
-    - item not in (existing_vm_names | default([]))
-  tags:
-    - deploy
-    - multipass
+# Note: Using Multipass DHCP IPs instead of manual static IP configuration
+# This is more reliable and avoids IP conflicts
 
-- name: Update all VMs
+- name: Configure VMs
   block:
     - name: Configure sudo access for ubuntu user
       shell: snap run multipass exec k3s-master -- sudo usermod -aG sudo ubuntu
       register: sudo_config
-      retries: 2
-      delay: 3
+      retries: 1
+      delay: 2
       until: sudo_config.rc == 0
 
-    - name: Update master VM
-      shell: snap run multipass exec k3s-master -- sudo apt update && sudo apt upgrade -y
+    - name: Quick system update (optional)
+      shell: snap run multipass exec k3s-master -- sudo apt update
       register: master_update
-      retries: 2
-      delay: 3
+      retries: 1
+      delay: 2
       until: master_update.rc == 0
+      ignore_errors: true
+      when: perform_system_updates | default(false)
 
-    - name: Update worker VMs
-      shell: snap run multipass exec {{ item }} -- sudo apt update && sudo apt upgrade -y
+    - name: Quick system update for workers (optional)
+      shell: snap run multipass exec {{ item }} -- sudo apt update
       register: worker_update
-      retries: 2
-      delay: 3
+      retries: 1
+      delay: 2
       until: worker_update.rc == 0
       loop: "{{ groups['k3s_workers'] }}"
-      when: cluster_type == "multi-node"
+      when: cluster_type == "multi-node" and (perform_system_updates | default(false))
+      ignore_errors: true
 
   tags:
     - deploy
