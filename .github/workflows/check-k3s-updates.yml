@@ -44,53 +44,51 @@ jobs:
             echo "No update needed. Current version is up to date."
           fi
 
-      - name: Update k3s version
+      - name: Log version information
         if: steps.check_update.outputs.update_needed == 'true'
         run: |
-          sed -i "s/k3s_version: \"${{ steps.current_version.outputs.current_version }}\"/k3s_version: \"${{ steps.latest_version.outputs.latest_version }}\"/" group_vars/all.yml
-          echo "Updated k3s version to ${{ steps.latest_version.outputs.latest_version }}"
+          echo "Current version: ${{ steps.current_version.outputs.current_version }}"
+          echo "Latest version: ${{ steps.latest_version.outputs.latest_version }}"
+          echo "Update needed: ${{ steps.current_version.outputs.current_version }} → ${{ steps.latest_version.outputs.latest_version }}"
 
-      - name: Update documentation
+      - name: Create Issue for k3s Update
         if: steps.check_update.outputs.update_needed == 'true'
-        run: |
-          # Update README if it mentions the version
-          if grep -q "${{ steps.current_version.outputs.current_version }}" README.md; then
-            sed -i "s/${{ steps.current_version.outputs.current_version }}/${{ steps.latest_version.outputs.latest_version }}/g" README.md
-            echo "Updated README.md"
-          fi
-          
-          # Update docs if they mention the version
-          if [ -f docs/README.md ] && grep -q "${{ steps.current_version.outputs.current_version }}" docs/README.md; then
-            sed -i "s/${{ steps.current_version.outputs.current_version }}/${{ steps.latest_version.outputs.latest_version }}/g" docs/README.md
-            echo "Updated docs/README.md"
-          fi
-
-      - name: Create Pull Request
-        if: steps.check_update.outputs.update_needed == 'true'
-        uses: peter-evans/create-pull-request@v5
+        uses: actions/github-script@v7
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: update-k3s-${{ steps.latest_version.outputs.latest_version }}
-          title: "Update k3s version to ${{ steps.latest_version.outputs.latest_version }}"
-          body: |
-            ## k3s Version Update
+          script: |
+            const issue = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Update k3s version to ${{ steps.latest_version.outputs.latest_version }}`,
+              body: `## k3s Version Update Available
             
-            This PR updates the k3s version from `${{ steps.current_version.outputs.current_version }}` to `${{ steps.latest_version.outputs.latest_version }}`.
+            A new k3s version is available for update.
             
-            ### Changes
-            - Updated k3s version in `group_vars/all.yml`
-            - Updated documentation references
+            **Current version**: ${{ steps.current_version.outputs.current_version }}
+            **Latest version**: ${{ steps.latest_version.outputs.latest_version }}
+            
+            ### Manual Update Required
+            
+            Please update the following files manually:
+            
+            1. **group_vars/all.yml**:
+               \`\`\`yaml
+               k3s_version: "${{ steps.latest_version.outputs.latest_version }}"
+               \`\`\`
+            
+            2. **README.md**: Update the version badge and any version references
             
             ### Testing
-            Please test the deployment with the new k3s version before merging.
+            After updating, test the deployment with the new k3s version.
             
             ### Release Notes
             Check the [k3s release notes](https://github.com/k3s-io/k3s/releases/tag/${{ steps.latest_version.outputs.latest_version }}) for any breaking changes.
-          labels: |
-            k3s-update
-            automated
-            dependencies
-          delete-branch: true
+            
+            ---
+            *This issue was automatically created by the k3s version check workflow.*`,
+              labels: ['k3s-update', 'automated', 'dependencies']
+            });
+            console.log(`Created issue #${issue.data.number}`);
 
       - name: Comment on PR if no update needed
         if: steps.check_update.outputs.update_needed == 'false'
