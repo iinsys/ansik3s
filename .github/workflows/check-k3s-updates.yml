@@ -1,0 +1,108 @@
+name: Check k3s Updates
+
+on:
+  schedule:
+    # Run on the 1st of every month at 00:00 UTC
+    - cron: '0 0 1 * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  check-k3s-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get latest k3s version
+        id: latest_version
+        run: |
+          LATEST_VERSION=$(curl -s https://api.github.com/repos/k3s-io/k3s/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
+          echo "latest_version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          echo "Latest k3s version: $LATEST_VERSION"
+
+      - name: Get current k3s version
+        id: current_version
+        run: |
+          CURRENT_VERSION=$(grep "k3s_version:" group_vars/all.yml | cut -d'"' -f2)
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "Current k3s version: $CURRENT_VERSION"
+
+      - name: Check if update is needed
+        id: check_update
+        run: |
+          if [ "${{ steps.latest_version.outputs.latest_version }}" != "${{ steps.current_version.outputs.current_version }}" ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "Update needed: ${{ steps.current_version.outputs.current_version }} -> ${{ steps.latest_version.outputs.latest_version }}"
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "No update needed. Current version is up to date."
+          fi
+
+      - name: Create update branch
+        if: steps.check_update.outputs.update_needed == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git checkout -b update-k3s-${{ steps.latest_version.outputs.latest_version }}
+
+      - name: Update k3s version
+        if: steps.check_update.outputs.update_needed == 'true'
+        run: |
+          sed -i "s/k3s_version: \"${{ steps.current_version.outputs.current_version }}\"/k3s_version: \"${{ steps.latest_version.outputs.latest_version }}\"/" group_vars/all.yml
+          echo "Updated k3s version to ${{ steps.latest_version.outputs.latest_version }}"
+
+      - name: Update documentation
+        if: steps.check_update.outputs.update_needed == 'true'
+        run: |
+          # Update README if it mentions the version
+          if grep -q "${{ steps.current_version.outputs.current_version }}" README.md; then
+            sed -i "s/${{ steps.current_version.outputs.current_version }}/${{ steps.latest_version.outputs.latest_version }}/g" README.md
+            echo "Updated README.md"
+          fi
+          
+          # Update docs if they mention the version
+          if [ -f docs/README.md ] && grep -q "${{ steps.current_version.outputs.current_version }}" docs/README.md; then
+            sed -i "s/${{ steps.current_version.outputs.current_version }}/${{ steps.latest_version.outputs.latest_version }}/g" docs/README.md
+            echo "Updated docs/README.md"
+          fi
+
+      - name: Commit and push changes
+        if: steps.check_update.outputs.update_needed == 'true'
+        run: |
+          git add .
+          git commit -m "Update k3s version to ${{ steps.latest_version.outputs.latest_version }}"
+          git push origin update-k3s-${{ steps.latest_version.outputs.latest_version }}
+
+      - name: Create Pull Request
+        if: steps.check_update.outputs.update_needed == 'true'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: update-k3s-${{ steps.latest_version.outputs.latest_version }}
+          title: "Update k3s version to ${{ steps.latest_version.outputs.latest_version }}"
+          body: |
+            ## k3s Version Update
+            
+            This PR updates the k3s version from `${{ steps.current_version.outputs.current_version }}` to `${{ steps.latest_version.outputs.latest_version }}`.
+            
+            ### Changes
+            - Updated k3s version in `group_vars/all.yml`
+            - Updated documentation references
+            
+            ### Testing
+            Please test the deployment with the new k3s version before merging.
+            
+            ### Release Notes
+            Check the [k3s release notes](https://github.com/k3s-io/k3s/releases/tag/${{ steps.latest_version.outputs.latest_version }}) for any breaking changes.
+          labels: |
+            k3s-update
+            automated
+            dependencies
+          delete-branch: true
+
+      - name: Comment on PR if no update needed
+        if: steps.check_update.outputs.update_needed == 'false'
+        run: |
+          echo "No k3s update needed. Current version ${{ steps.current_version.outputs.current_version }} is up to date." 
