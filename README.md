@@ -2,6 +2,12 @@
 
 Spin up Single or multiple k3s cluster on multipass using ansible
 
+[![CI/CD Pipeline](https://github.com/iinsys/ansik3s/workflows/CI/CD%20Pipeline/badge.svg)](https://github.com/iinsys/ansik3s/actions/workflows/test.yml)
+[![k3s Version](https://img.shields.io/badge/k3s-v1.28.5%2Bk3s1-blue.svg)](https://github.com/k3s-io/k3s/releases)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Ansible](https://img.shields.io/badge/ansible-2.9+-red.svg)](https://docs.ansible.com/)
+[![Multipass](https://img.shields.io/badge/multipass-1.0+-orange.svg)](https://multipass.run/)
+
 ## Project Goal
 
 The goal of this project is to provide a simple and automated way to set up a lightweight Kubernetes cluster using k3s on Multipass VMs, managed with Ansible.
@@ -170,6 +176,26 @@ multipass list
 # Access VM directly
 multipass shell k3s-master
 ```
+
+## Automated Workflows
+
+This project uses GitHub Actions for automated quality assurance and maintenance:
+
+### CI/CD Pipeline
+- **Status**: ![CI/CD Pipeline](https://github.com/iinsys/ansik3s/workflows/CI/CD%20Pipeline/badge.svg)
+- **Purpose**: Validates code syntax, YAML files, and shell scripts
+- **Trigger**: Pull requests to main branch
+- **Runtime**: ~1-2 minutes
+
+### k3s Version Updates
+- **Schedule**: Monthly (1st of every month)
+- **Purpose**: Automatically checks for k3s version updates
+- **Action**: Creates pull requests when newer versions are available
+- **Current**: v1.28.5+k3s1 (Latest: v1.33.3+k3s1)
+
+For more details, see:
+- [CI/CD Pipeline Documentation](docs/github-actions.md)
+- [k3s Version Updates](docs/k3s-version-updates.md)
 
 ## Contributing
 
